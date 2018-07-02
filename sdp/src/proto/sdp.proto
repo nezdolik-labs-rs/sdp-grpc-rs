@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+
+package sdpmessaging;
+
+service SDRegistry {
+    rpc RegisterPeer (RegisterPeerRequest) returns (RegisterPeerResponse) {
+    }
+
+    rpc DiscoverPeers (DiscoverPeersRequest) returns (DiscoverPeersResponse) {
+    }
+}
+
+
+message RegisterPeerRequest {
+    string serviceKey = 1;
+    string peerIp = 2;
+}
+
+message RegisterPeerResponse {
+    string serviceKey = 1;
+    bool status = 2;
+}
+
+message DiscoverPeersRequest {
+    string serviceKey = 1;
+}
+
+message DiscoverPeersResponse {
+    repeated string peerIp = 5;
+}

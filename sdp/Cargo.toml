@@ -1,0 +1,10 @@
+[package]
+name = "sdp-grpc"
+version = "0.1.0"
+authors = ["Kateryna Nezdolii <nezdolik@spotify.com>"]
+
+[dependencies]
+grpc-rust = "0.1.0"
+protobuf  = "1.*"
+grpc      = "0.2.1"
+
