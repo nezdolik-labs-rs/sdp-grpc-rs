@@ -1,15 +1,17 @@
+use bincode::serialize;
+use memmap::MmapMut;
+use scheduled_executor::ThreadPoolExecutor;
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::net::Ipv4Addr;
-use std::result;
-use std::sync::Mutex;
-
 use std::fs::OpenOptions;
 use std::io::Write;
+use std::net::Ipv4Addr;
 use std::path::PathBuf;
-
-use memmap::MmapMut;
+use std::result;
+use std::sync::Mutex;
+use std::thread;
+use std::time::Duration;
 
 
 /// All error information is propagated to the diagnostics argument, but we signal that an error
@@ -18,7 +20,7 @@ pub type Result<T> = result::Result<T, ()>;
 
 pub struct SDPService {
     registry_in_mem: Mutex<HashMap<String, HashSet<Ipv4Addr>>>,
-    path: PathBuf
+    path: PathBuf,
 }
 
 impl SDPService {
@@ -52,10 +54,9 @@ impl SDPService {
             .create(true)
             .open(&path)?;
         let mut mmap = unsafe { MmapMut::map_mut(&file)? };
-        //todo serialise in mem registry
-        (&mut mmap[..]).write_all(b"registry content")?;
+        let encoded: Vec<u8> = serialize(&req).unwrap();
+        (&mut mmap[..]).write_all(&encoded)?;
         mmap.flush()?;
-
     }
 
     fn print(&self) {
@@ -69,10 +70,26 @@ impl SDPService {
 
     pub fn main() {
         let reg = HashMap::new();
-        let sdp = SDPService { registry_in_mem: Mutex::new(reg), path: RelativePathBuf::new()};
+        let sdp = SDPService { registry_in_mem: Mutex::new(reg), path: RelativePathBuf::new() };
         sdp.put(String::from("raft"), Ipv4Addr::new(0, 0, 0, 0));
         sdp.put(String::from("raft"), Ipv4Addr::new(1, 1, 1, 1));
         sdp.print();
+        
+        //todo extract to method
+        let executor = ThreadPoolExecutor::new(1).expect("Thread pool creation failed");
+
+
+        executor.schedule_fixed_rate(
+            Duration::from_secs(0),  // No wait for scheduling the first task
+            Duration::from_secs(360),  // and schedule every following task at 6 mins intervals
+            move |_| {
+                sdp.flush()
+            },
+        );
+
+        loop {
+            thread::park();
+        }
     }
 }
 
