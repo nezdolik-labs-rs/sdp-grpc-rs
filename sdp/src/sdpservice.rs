@@ -5,18 +5,25 @@ use std::net::Ipv4Addr;
 use std::result;
 use std::sync::Mutex;
 
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::path::PathBuf;
+
+use memmap::MmapMut;
+
 
 /// All error information is propagated to the diagnostics argument, but we signal that an error
 /// occurred by returning Err(()).
 pub type Result<T> = result::Result<T, ()>;
 
 pub struct SDPService {
-    registry: Mutex<HashMap<String, HashSet<Ipv4Addr>>>
+    registry_in_mem: Mutex<HashMap<String, HashSet<Ipv4Addr>>>,
+    path: PathBuf
 }
 
 impl SDPService {
     pub fn put(&self, service_key: String, ip: Ipv4Addr) -> Result<String> {
-        let mut reg = self.registry.lock().unwrap();
+        let mut reg = self.registry_in_mem.lock().unwrap();
         let peers = match reg.entry(service_key.clone()) {
             Vacant(entry) => entry.insert(HashSet::new()),
             Occupied(entry) => entry.into_mut(),
@@ -26,7 +33,7 @@ impl SDPService {
     }
 
     pub fn delete(&self, service_key: String, ip: &Ipv4Addr) -> Result<String> {
-        let mut reg = self.registry.lock().unwrap();
+        let mut reg = self.registry_in_mem.lock().unwrap();
         match reg.entry(service_key.clone()) {
             Occupied(entry) => {
                 let peers = entry.into_mut();
@@ -37,8 +44,22 @@ impl SDPService {
         Ok(service_key)
     }
 
+    fn flush(&self) {
+        let mut reg = self.registry_in_mem.lock().unwrap();
+        let registry_on_disk = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(&path)?;
+        let mut mmap = unsafe { MmapMut::map_mut(&file)? };
+        //todo serialise in mem registry
+        (&mut mmap[..]).write_all(b"registry content")?;
+        mmap.flush()?;
+
+    }
+
     fn print(&self) {
-        let reg = self.registry.lock().unwrap();
+        let reg = self.registry_in_mem.lock().unwrap();
         for (service_key, peers) in reg.iter() {
             for peer in peers.iter() {
                 println!("Key={key}, Value={val}", key = service_key, val = peer);
@@ -48,7 +69,7 @@ impl SDPService {
 
     pub fn main() {
         let reg = HashMap::new();
-        let sdp = SDPService {registry: Mutex::new(reg)};
+        let sdp = SDPService { registry_in_mem: Mutex::new(reg), path: RelativePathBuf::new()};
         sdp.put(String::from("raft"), Ipv4Addr::new(0, 0, 0, 0));
         sdp.put(String::from("raft"), Ipv4Addr::new(1, 1, 1, 1));
         sdp.print();
